@@ -1,1 +1,13 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Python
+venv/
+__pycache__/
+
+# Docker
+*.tar
 venv
