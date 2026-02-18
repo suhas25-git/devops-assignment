@@ -1,11 +1,14 @@
 from celery import Celery
 import time
+import os
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 # Configure Celery to use Redis as the message broker
 celery = Celery(
     "worker",  # This is the name of your Celery application
-    broker="redis://localhost:6379/0",  # This is the Redis connection string
-    backend="redis://localhost:6379/0",  # for storing task results
+    broker=REDIS_URL,  # This is the Redis connection string
+    backend=REDIS_URL,  # for storing task results
 )
 
 
