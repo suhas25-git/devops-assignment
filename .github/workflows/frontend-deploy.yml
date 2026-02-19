@@ -33,14 +33,6 @@ jobs:
         run: |
           aws s3 sync frontend/ s3://$S3_BUCKET --delete
 
-      # Make files public
-      - name: Set Public Permissions
-        run: |
-          aws s3 cp s3://$S3_BUCKET \
-            s3://$S3_BUCKET \
-            --recursive \
-            --acl public-read
-
       # Show website URL
       - name: Show Website URL
         run: |
