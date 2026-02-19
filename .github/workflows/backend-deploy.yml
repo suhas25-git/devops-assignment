@@ -1,0 +1,78 @@
+name: Backend Deploy to ECS
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "backend/**"
+      - "Dockerfile"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # Checkout
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      # Login to ECR
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ap-south-1 | \
+          docker login --username AWS --password-stdin \
+          ${{ secrets.ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com
+
+      # Build Backend Image
+      - name: Build Backend Image
+        run: |
+          docker build -t devops-backend .
+
+      # Install Trivy
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy -y
+
+      # Scan Image
+      - name: Run Trivy Scan
+        run: |
+          trivy image devops-backend --exit-code 0 --severity HIGH,CRITICAL
+
+      # Tag & Push Backend
+      - name: Push Backend Image
+        run: |
+          docker tag devops-backend:latest \
+          ${{ secrets.ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com/devops-backend:latest
+
+          docker push \
+          ${{ secrets.ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com/devops-backend:latest
+
+      # Deploy Backend ECS
+      - name: Deploy Backend Service
+        run: |
+          aws ecs update-service \
+            --cluster devops-cluster \
+            --service backend-service \
+            --force-new-deployment
+
+      # Deploy Worker ECS
+      - name: Deploy Worker Service
+        run: |
+          aws ecs update-service \
+            --cluster devops-cluster \
+            --service worker-service \
+            --force-new-deployment
+
