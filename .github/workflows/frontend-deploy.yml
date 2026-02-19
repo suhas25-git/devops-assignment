@@ -6,40 +6,44 @@ on:
     paths:
       - "frontend/**"
 
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
 
-      # Checkout
+      # Checkout code
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # AWS Credentials
+      # Configure AWS credentials
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      # Upload to S3
+      # Upload frontend files
       - name: Upload Frontend to S3
         run: |
-          aws s3 sync frontend/ s3://devops-frontend-suhas --delete
+          aws s3 sync frontend/ s3://$S3_BUCKET --delete
 
       # Make files public
-      - name: Set Public Read Permissions
+      - name: Set Public Permissions
         run: |
-          aws s3 cp s3://devops-frontend-suhas \
-            s3://devops-frontend-suhas \
+          aws s3 cp s3://$S3_BUCKET \
+            s3://$S3_BUCKET \
             --recursive \
             --acl public-read
 
-      # Output URL
+      # Show website URL
       - name: Show Website URL
         run: |
           echo "Frontend URL:"
-          echo "http://devops-frontend-suhas.s3-website-ap-south-1.amazonaws.com"
+          echo "http://$S3_BUCKET.s3-website-${AWS_REGION}.amazonaws.com"
 

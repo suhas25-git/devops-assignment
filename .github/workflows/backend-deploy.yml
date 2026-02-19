@@ -7,6 +7,15 @@ on:
       - "backend/**"
       - "Dockerfile"
 
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ACCOUNT_ID: ${{ secrets.ACCOUNT_ID }}
+  ECR_BACKEND: ${{ secrets.ECR_BACKEND_REPO }}
+  ECR_WORKER: ${{ secrets.ECR_WORKER_REPO }}
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+  ECS_BACKEND_SERVICE: ${{ secrets.ECS_BACKEND_SERVICE }}
+  ECS_WORKER_SERVICE: ${{ secrets.ECS_WORKER_SERVICE }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -23,24 +32,25 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
+          aws-region: ${{ env.AWS_REGION }}
 
       # Login to ECR
       - name: Login to Amazon ECR
         run: |
-          aws ecr get-login-password --region ap-south-1 | \
+          aws ecr get-login-password --region $AWS_REGION | \
           docker login --username AWS --password-stdin \
-          ${{ secrets.ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com
+          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
       # Build Backend Image
       - name: Build Backend Image
         run: |
-          docker build -t devops-backend .
+          docker build -t backend .
 
       # Install Trivy
       - name: Install Trivy
         run: |
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          sudo apt-get update
+          sudo apt-get install wget apt-transport-https gnupg lsb-release -y
           wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
           echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
           sudo apt-get update
@@ -49,30 +59,39 @@ jobs:
       # Scan Image
       - name: Run Trivy Scan
         run: |
-          trivy image devops-backend --exit-code 0 --severity HIGH,CRITICAL
+          trivy image backend --exit-code 0 --severity HIGH,CRITICAL
 
       # Tag & Push Backend
       - name: Push Backend Image
         run: |
-          docker tag devops-backend:latest \
-          ${{ secrets.ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com/devops-backend:latest
+          docker tag backend:latest \
+          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_BACKEND:latest
 
           docker push \
-          ${{ secrets.ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com/devops-backend:latest
+          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_BACKEND:latest
 
-      # Deploy Backend ECS
+      # Tag & Push Worker
+      - name: Push Worker Image
+        run: |
+          docker tag backend:latest \
+          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WORKER:latest
+
+          docker push \
+          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WORKER:latest
+
+      # Deploy Backend Service
       - name: Deploy Backend Service
         run: |
           aws ecs update-service \
-            --cluster devops-cluster \
-            --service backend-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_BACKEND_SERVICE \
             --force-new-deployment
 
-      # Deploy Worker ECS
+      # Deploy Worker Service
       - name: Deploy Worker Service
         run: |
           aws ecs update-service \
-            --cluster devops-cluster \
-            --service worker-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_WORKER_SERVICE \
             --force-new-deployment
 
